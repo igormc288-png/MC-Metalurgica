@@ -1,26 +1,25 @@
-
 import streamlit as st
 import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime
-import io
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Diário de Bordo - Metalúrgica", layout="centered")
 
 st.title("🏭 Diário de Bordo & OEE Metalúrgica")
-st.subheader("Controle de Produção, Manutenção e Paradas")
+st.subheader("Central de Produção, Manutenção e Paradas")
 
-# Criar a memória persistente enquanto o app estiver aberto na nuvem
-if "dados_diario" not in st.session_state:
-    st.session_state.dados_diario = pd.DataFrame(columns=[
-        "Data/Hora", "Máquina", "Operador", "Tempo Total (h)", 
-        "Tempo Produção (h)", "Tempo Manutenção (h)", "Tempo Ocioso (h)", 
-        "Motivo da Parada", "Peças Boas", "Refugo", "Qualidade (%)", "Observações"
-    ])
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    # Ler os dados existentes para criar o histórico
+    dados_existentes = conn.read(ttl=0) # ttl=0 garante que busca o dado mais fresco
+except:
+    dados_existentes = pd.DataFrame()
 
 # --- ENTRADA DE DADOS (MENU LATERAL) ---
 st.sidebar.header("📋 Registro do Turno")
-maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["BLM", "EMT", "LASER", "SOLDA", "ZAPROMAQ","SERRA"])
+maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["Torno CNC 01", "Centro de Usinagem 02", "Prensa 03", "Corte a Laser 04", "Dobradeira 05"])
 operador = st.sidebar.text_input("Nome do Operador")
 
 st.sidebar.divider()
@@ -81,41 +80,29 @@ else:
     st.pyplot(fig)
 
     st.divider()
-    
-    # CAMPO DE TEXTO DA OBSERVAÇÃO
     observacoes = st.text_area("📝 Descreva detalhes das paradas ou observações do funcionário:")
 
-    # --- BOTOES DE SALVAR ---
-    if st.button("💾 Salvar Registro no Diário de Bordo"):
-        novos_dados = {
+    # --- BOTÃO DE SALVAR NA PLANILHA CENTRAL ---
+    if st.button("💾 Enviar Registro para a Planilha Central"):
+        novos_dados = pd.DataFrame([{
             "Data/Hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             "Máquina": maquina, "Operador": operador if operador else "Não Informado", 
             "Tempo Total (h)": tempo_total, "Tempo Produção (h)": tempo_producao, 
             "Tempo Manutenção (h)": tempo_manutencao, "Tempo Ocioso (h)": tempo_ocioso, 
             "Motivo da Parada": motivo, "Peças Boas": pecas_boas, "Refugo": pecas_refugo, 
             "Qualidade (%)": round(p_qualidade, 2), "Observações": observacoes
-        }
-        st.session_state.dados_diario = pd.concat([st.session_state.dados_diario, pd.DataFrame([novos_dados])], ignore_index=True)
-        st.success("✅ Registro adicionado com sucesso abaixo!")
+        }])
+        
+        # Combinar dados antigos com os novos e atualizar o Google Sheets
+        df_atualizado = pd.concat([dados_existentes, novos_dados], ignore_index=True)
+        conn.update(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], data=df_atualizado)
+        st.success("✅ Enviado com sucesso! Dados consolidados na nuvem.")
+        st.rerun()
 
-    # --- PAINEL DO GESTOR (HISTÓRICO VISÍVEL) ---
+    # --- VISUALIZAÇÃO DO HISTÓRICO GLOBAL ---
     st.divider()
-    st.write("### 📜 Painel do Gestor - Histórico de Turnos e Observações")
-    
-    if not st.session_state.dados_diario.empty:
-        # Exibe a tabela completa no ecrã para ler as observações na hora
-        st.dataframe(st.session_state.dados_diario, use_container_width=True)
-        
-        # Cria a função para converter para baixar em Excel
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            st.session_state.dados_diario.to_excel(writer, index=False, sheet_name='Histórico')
-        
-        st.download_button(
-            label="📥 Descarregar Histórico Completo em Excel",
-            data=buffer.getvalue(),
-            file_name=f"historico_metalurgica_{datetime.now().strftime('%d%m%Y')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    st.write("### 📜 Histórico Consolidado de Todos os Aparelhos")
+    if not dados_existentes.empty:
+        st.dataframe(dados_existentes, use_container_width=True)
     else:
-        st.info("Nenhum registro inserido até o momento. Preencha os dados e clique em 'Salvar'.")
+        st.info("Aguardando os primeiros registros dos operadores.")
