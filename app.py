@@ -1,15 +1,16 @@
+
 import streamlit as st
 import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime
+import io
 
-# Configuração da página para telemóvel/celular
 st.set_page_config(page_title="Diário de Bordo - Metalúrgica", layout="centered")
 
 st.title("🏭 Diário de Bordo & OEE Metalúrgica")
 st.subheader("Controle de Produção, Manutenção e Paradas")
 
-# Inicializar uma tabela temporária na memória
+# Criar a memória persistente enquanto o app estiver aberto na nuvem
 if "dados_diario" not in st.session_state:
     st.session_state.dados_diario = pd.DataFrame(columns=[
         "Data/Hora", "Máquina", "Operador", "Tempo Total (h)", 
@@ -17,9 +18,9 @@ if "dados_diario" not in st.session_state:
         "Motivo da Parada", "Peças Boas", "Refugo", "Qualidade (%)", "Observações"
     ])
 
-# --- ENTRADA DE DADOS ---
+# --- ENTRADA DE DADOS (MENU LATERAL) ---
 st.sidebar.header("📋 Registro do Turno")
-maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["blm", "emt", "zapromaq", "Corte a Laser", "solda","serra"])
+maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["Torno CNC 01", "Centro de Usinagem 02", "Prensa 03", "Corte a Laser 04", "Dobradeira 05"])
 operador = st.sidebar.text_input("Nome do Operador")
 
 st.sidebar.divider()
@@ -62,7 +63,7 @@ else:
 
     st.divider()
 
-    # --- DIAGRAMA ---
+    # --- GRÁFICO ---
     st.write("### 📊 Distribuição do Tempo")
     labels = ['Produção', 'Manutenção', 'Ocioso']
     tamanhos = [p_producao, p_manutencao, p_ocioso]
@@ -80,22 +81,41 @@ else:
     st.pyplot(fig)
 
     st.divider()
-    observacoes = st.text_area("Descreva detalhes das paradas ou observações:")
+    
+    # CAMPO DE TEXTO DA OBSERVAÇÃO
+    observacoes = st.text_area("📝 Descreva detalhes das paradas ou observações do funcionário:")
 
-    # --- SALVAR ---
+    # --- BOTOES DE SALVAR ---
     if st.button("💾 Salvar Registro no Diário de Bordo"):
         novos_dados = {
             "Data/Hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "Máquina": maquina, "Operador": operador, "Tempo Total (h)": tempo_total,
-            "Tempo Produção (h)": tempo_producao, "Tempo Manutenção (h)": tempo_manutencao,
-            "Tempo Ocioso (h)": tempo_ocioso, "Motivo da Parada": motivo,
-            "Peças Boas": pecas_boas, "Refugo": pecas_refugo, "Qualidade (%)": round(p_qualidade, 2),
-            "Observações": observacoes
+            "Máquina": maquina, "Operador": operador if operador else "Não Informado", 
+            "Tempo Total (h)": tempo_total, "Tempo Produção (h)": tempo_producao, 
+            "Tempo Manutenção (h)": tempo_manutencao, "Tempo Ocioso (h)": tempo_ocioso, 
+            "Motivo da Parada": motivo, "Peças Boas": pecas_boas, "Refugo": pecas_refugo, 
+            "Qualidade (%)": round(p_qualidade, 2), "Observações": observacoes
         }
         st.session_state.dados_diario = pd.concat([st.session_state.dados_diario, pd.DataFrame([novos_dados])], ignore_index=True)
-        st.success("✅ Dados gravados com sucesso!")
+        st.success("✅ Registro adicionado com sucesso abaixo!")
 
+    # --- PAINEL DO GESTOR (HISTÓRICO VISÍVEL) ---
+    st.divider()
+    st.write("### 📜 Painel do Gestor - Histórico de Turnos e Observações")
+    
     if not st.session_state.dados_diario.empty:
-        st.divider()
-        st.write("### 📜 Histórico Recente")
-        st.dataframe(st.session_state.dados_diario)
+        # Exibe a tabela completa no ecrã para ler as observações na hora
+        st.dataframe(st.session_state.dados_diario, use_container_width=True)
+        
+        # Cria a função para converter para baixar em Excel
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            st.session_state.dados_diario.to_excel(writer, index=False, sheet_name='Histórico')
+        
+        st.download_button(
+            label="📥 Descarregar Histórico Completo em Excel",
+            data=buffer.getvalue(),
+            file_name=f"historico_metalurgica_{datetime.now().strftime('%d%m%Y')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Nenhum registro inserido até o momento. Preencha os dados e clique em 'Salvar'.")
