@@ -20,7 +20,7 @@ if "dados_diario" not in st.session_state:
 
 # --- ENTRADA DE DADOS (MENU LATERAL) ---
 st.sidebar.header("📋 Registro do Turno")
-maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["BLM", "EMT", "LASER", "SOLDA", "ZAPROMAQ""SERRA"])
+maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["BLM", "EMT", "LASER", "SOLDA", "ZAPROMAQ","SERRA"])
 operador = st.sidebar.text_input("Nome do Operador")
 
 st.sidebar.divider()
