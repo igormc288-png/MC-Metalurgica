@@ -19,7 +19,7 @@ except:
 
 # --- ENTRADA DE DADOS (MENU LATERAL) ---
 st.sidebar.header("📋 Registro do Turno")
-maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["Torno CNC 01", "Centro de Usinagem 02", "Prensa 03", "Corte a Laser 04", "Dobradeira 05"])
+maquina = st.sidebar.selectbox("Selecione a Máquina/Posto", ["BLM", "EMT", "LASER", "ZAPROMAQ", "SOLDA","SERRA"])
 operador = st.sidebar.text_input("Nome do Operador")
 
 st.sidebar.divider()
