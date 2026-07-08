@@ -11,10 +11,11 @@ st.subheader("Central de Produção, Manutenção e Paradas")
 
 # --- CONEXÃO COM O GOOGLE SHEETS ---
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # Ler os dados existentes para criar o histórico
-    dados_existentes = conn.read(ttl=0) # ttl=0 garante que busca o dado mais fresco
-except:
+    # Pega o link que você colou nos Secrets e lê os dados direto por ele
+    url_planilha = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    url_csv = url_planilha.replace("/edit?usp=sharing", "/export?format=csv").replace("/edit", "/export?format=csv")
+    dados_existentes = pd.read_csv(url_csv)
+except Exception as e:
     dados_existentes = pd.DataFrame()
 
 # --- ENTRADA DE DADOS (MENU LATERAL) ---
