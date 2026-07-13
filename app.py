@@ -1,20 +1,26 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import gspread
 
 st.set_page_config(page_title="Diário de Bordo & OEE Metalúrgica", layout="centered")
 st.title("📝 Diário de Bordo & OEE Metalúrgica")
 st.subheader("Central de Produção, Manutenção e Paradas")
 
-# --- LEITURA AUTOMÁTICA DA PLANILHA (SECRETS) ---
+# --- CONEXÃO REAL COM O GOOGLE SHEETS ---
 try:
     url_planilha = st.secrets["connections"]["spreadsheet"]
     url_csv = url_planilha.replace("/edit?usp=sharing", "/export?format=csv").replace("/edit", "/export?format=csv")
+    
+    # Conexão pública para leitura/escrita simplificada
+    gc = gspread.public()
+    sh = gc.open_by_url(url_planilha)
+    worksheet = sh.get_worksheet(0)
 except Exception as e:
-    st.error("Erro nos Secrets. Certifique-se de que o link da planilha está configurado.")
+    st.error("Erro de conexão. Certifique-se de que o link correto está no Secrets do Streamlit.")
     st.stop()
 
-# --- FORMULÁRIO COM CÁLCULOS EM TEMPO REAL ---
+# --- FORMULÁRIO COM ATUALIZAÇÃO EM TEMPO REAL ---
 with st.form("formulario_turno"):
     st.markdown("### 📋 Dados Gerais do Turno")
     
@@ -64,25 +70,31 @@ with st.form("formulario_turno"):
     with col9:
         pecas_perdidas = st.number_input("Quantidade de Refugo (Peças Perdidas):", min_value=0, step=1, value=0)
 
-    # --- CÁLCULO E EXIBIÇÃO DE PORCENTAGEM ORIGINAL ---
+    # Cálculo em tempo real da porcentagem
     total_pecas = pecas_produzidas + pecas_perdidas
     porcentagem_qualidade = 100.0 if total_pecas == 0 else round((pecas_produzidas / total_pecas) * 100, 2)
     
-    # Métrica de Porcentagem Bonita e Dinâmica
     st.metric(label="📊 Porcentagem de Qualidade do Lote", value=f"{porcentagem_qualidade}%")
 
     st.markdown("---")
-    observacoes = st.text_area("Descreva detalhes das paradas ou observações do funcionário:")
+    observacoes = st.text_area("Descreva detalhes das paradas ou observações:")
     
     submetido = st.form_submit_button("Enviar Registro para a Planilha Central")
     
     if submetido:
         if operador:
-            # Envio seguro simulado para o endpoint aberto da sua planilha
-            import urllib.request
-            import urllib.parse
-            
-            # Link de recebimento de dados sem autenticação bloqueante
-            st.success("✨ Registro enviado com sucesso! Os dados entraram na planilha central.")
+            try:
+                # Transforma os dados em uma lista ordenada para anexar na planilha
+                nova_linha = [
+                    str(data_registro), turno, maquina, operador, 
+                    tempo_total, tempo_producao, tempo_manutencao, 
+                    hora_parou, hora_voltou, motivo_parada, 
+                    pecas_produzidas, pecas_perdidas, f"{porcentagem_qualidade}%", observacoes
+                ]
+                # Comando real que escreve os dados na próxima linha em branco do Sheets
+                worksheet.append_row(nova_linha)
+                st.success("✨ Registro enviado com sucesso! Verifique a sua planilha central.")
+            except Exception as erro:
+                st.error(f"Erro ao salvar na planilha: {erro}")
         else:
             st.warning("Por favor, preencha o campo do Operador antes de submeter.")
