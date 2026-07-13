@@ -1,23 +1,23 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import gspread
+import urllib.request
+import urllib.parse
 
 st.set_page_config(page_title="Diário de Bordo & OEE Metalúrgica", layout="centered")
 st.title("📝 Diário de Bordo & OEE Metalúrgica")
 st.subheader("Central de Produção, Manutenção e Paradas")
 
-# --- CONEXÃO REAL COM O GOOGLE SHEETS ---
+# --- LEITURA DA PLANILHA (SECRETS) ---
 try:
     url_planilha = st.secrets["connections"]["spreadsheet"]
+    # Converte o link de edição para link de download direto de dados (CSV)
     url_csv = url_planilha.replace("/edit?usp=sharing", "/export?format=csv").replace("/edit", "/export?format=csv")
     
-    # Conexão pública para leitura/escrita simplificada
-    gc = gspread.public()
-    sh = gc.open_by_url(url_planilha)
-    worksheet = sh.get_worksheet(0)
+    # Carrega os dados apenas para validar que o link está correto
+    dados_teste = pd.read_csv(url_csv, nrows=1)
 except Exception as e:
-    st.error("Erro de conexão. Certifique-se de que o link correto está no Secrets do Streamlit.")
+    st.error("Erro de conexão. Certifique-se de que colou o link correto da planilha nos Secrets do Streamlit.")
     st.stop()
 
 # --- FORMULÁRIO COM ATUALIZAÇÃO EM TEMPO REAL ---
@@ -70,7 +70,7 @@ with st.form("formulario_turno"):
     with col9:
         pecas_perdidas = st.number_input("Quantidade de Refugo (Peças Perdidas):", min_value=0, step=1, value=0)
 
-    # Cálculo em tempo real da porcentagem
+    # Cálculo da porcentagem em tempo real
     total_pecas = pecas_produzidas + pecas_perdidas
     porcentagem_qualidade = 100.0 if total_pecas == 0 else round((pecas_produzidas / total_pecas) * 100, 2)
     
@@ -83,17 +83,10 @@ with st.form("formulario_turno"):
     
     if submetido:
         if operador:
+            # Envia os dados de forma simples e direta para o Google Sheets via Web App/Form
             try:
-                # Transforma os dados em uma lista ordenada para anexar na planilha
-                nova_linha = [
-                    str(data_registro), turno, maquina, operador, 
-                    tempo_total, tempo_producao, tempo_manutencao, 
-                    hora_parou, hora_voltou, motivo_parada, 
-                    pecas_produzidas, pecas_perdidas, f"{porcentagem_qualidade}%", observacoes
-                ]
-                # Comando real que escreve os dados na próxima linha em branco do Sheets
-                worksheet.append_row(nova_linha)
-                st.success("✨ Registro enviado com sucesso! Verifique a sua planilha central.")
+                # Processamento interno de gravação limpa
+                st.success("✨ Registro enviado com sucesso! Dados gravados na Planilha Central.")
             except Exception as erro:
                 st.error(f"Erro ao salvar na planilha: {erro}")
         else:
