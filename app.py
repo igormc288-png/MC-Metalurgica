@@ -1,18 +1,21 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
+import requests
+import json
 
 st.set_page_config(page_title="Diário de Bordo & OEE Metalúrgica", layout="centered")
 st.title("📝 Diário de Bordo & OEE Metalúrgica")
 st.subheader("Central de Produção, Manutenção e Paradas")
 
-# --- CONEXÃO COM O GOOGLE SHEETS ---
-# Inicializa a conexão sem travar o app se o link estiver em atualização
+# --- LEITURA DA PLANILHA (SECRETS) ---
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    url_planilha = st.secrets["connections"]["spreadsheet"]
+    url_csv = url_planilha.replace("/edit?usp=sharing", "/export?format=csv").split("/edit")[0] + "/export?format=csv"
+    dados_teste = pd.read_csv(url_csv, nrows=1)
 except Exception as e:
-    conn = None
+    st.error("Erro ao carregar a planilha. Verifique o link em 'spreadsheet' nos Secrets.")
+    st.stop()
 
 # --- FORMULÁRIO COM ATUALIZAÇÃO EM TEMPO REAL ---
 with st.form("formulario_turno"):
@@ -77,41 +80,35 @@ with st.form("formulario_turno"):
     
     if submetido:
         if operador:
-            if conn is not None:
-                try:
-                    # Tenta ler os dados existentes primeiro
-                    try:
-                        dados_existentes = conn.read()
-                    except Exception:
-                        dados_existentes = pd.DataFrame()
-
-                    # Prepara a nova linha
-                    nova_linha = pd.DataFrame([{
-                        "Data": str(data_registro),
-                        "Turno": turno,
-                        "Máquina": maquina,
-                        "Operador": operador,
-                        "Tempo Total (h)": tempo_total,
-                        "Tempo Produção (h)": tempo_producao,
-                        "Tempo Manutenção (h)": tempo_manutencao,
-                        "Hora Parou": hora_parou,
-                        "Hora Voltou": hora_voltou,
-                        "Motivo da Parada": motivo_parada,
-                        "Peças Boas": pecas_produzidas,
-                        "Refugo": pecas_perdidas,
-                        "Qualidade (%)": f"{porcentagem_qualidade}%",
-                        "Observações": observacoes
-                    }])
-                    
-                    # Concatena e grava
-                    dados_atualizados = pd.concat([dados_existentes, nova_linha], ignore_index=True)
-                    conn.update(data=dados_atualizados)
-                    
+            try:
+                # Prepara os dados do JSON para envio seguro via Web App
+                payload = {
+                    "data": str(data_registro),
+                    "turno": turno,
+                    "maquina": maquina,
+                    "operador": operador,
+                    "tempo_total": tempo_total,
+                    "tempo_producao": tempo_producao,
+                    "tempo_manutencao": tempo_manutencao,
+                    "hora_parou": hora_parou,
+                    "hora_voltou": hora_voltou,
+                    "motivo_parada": motivo_parada,
+                    "pecas_boas": pecas_produzidas,
+                    "refugo": pecas_perdidas,
+                    "qualidade": f"{porcentagem_qualidade}%",
+                    "observacoes": observacoes
+                }
+                
+                # Envia diretamente ao Web App do Google Sheets
+                web_app_url = st.secrets["connections"]["web_app_url"]
+                resposta = requests.post(web_app_url, data=json.dumps(payload))
+                
+                if resposta.status_code == 200:
                     st.success("✨ Registro enviado com sucesso! Os dados entraram na sua planilha central.")
                     st.balloons()
-                except Exception as erro:
-                    st.error(f"Erro ao salvar na planilha: {erro}. Verifique se o link no Secrets é o da nova planilha convertida (sem o .xlsx).")
-            else:
-                st.error("Erro de conexão de rede com os servidores do Streamlit/Google. Verifique as configurações de rede.")
+                else:
+                    st.error(f"Erro na comunicação com o Google Apps Script. Código: {resposta.status_code}")
+            except Exception as erro:
+                st.error(f"Erro ao salvar na planilha: {erro}")
         else:
             st.warning("Por favor, preencha o campo do Operador antes de enviar.")
