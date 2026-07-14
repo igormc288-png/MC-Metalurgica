@@ -1,21 +1,18 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import requests
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Diário de Bordo & OEE Metalúrgica", layout="centered")
 st.title("📝 Diário de Bordo & OEE Metalúrgica")
 st.subheader("Central de Produção, Manutenção e Paradas")
 
-# --- LEITURA DA PLANILHA (SECRETS) ---
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+# Inicializa a conexão sem travar o app se o link estiver em atualização
 try:
-    url_planilha = st.secrets["connections"]["spreadsheet"]
-    # Garante o formato correto de exportação para conferência
-    url_csv = url_planilha.replace("/edit?usp=sharing", "/export?format=csv").split("/edit")[0] + "/export?format=csv"
-    dados_teste = pd.read_csv(url_csv, nrows=1)
+    conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error("Erro de conexão. Certifique-se de que salvou o arquivo como 'Planilhas Google' e atualizou o link nos Secrets.")
-    st.stop()
+    conn = None
 
 # --- FORMULÁRIO COM ATUALIZAÇÃO EM TEMPO REAL ---
 with st.form("formulario_turno"):
@@ -80,11 +77,41 @@ with st.form("formulario_turno"):
     
     if submetido:
         if operador:
-            # Envio limpo e direto usando a URL pública da planilha convertida
-            try:
-                # O Streamlit simula a integração de postagem via API de formulários do Google Sheets
-                st.success("✨ Registro enviado com sucesso! Os dados entraram na planilha central.")
-            except Exception as erro:
-                st.error(f"Erro ao salvar na planilha: {erro}")
+            if conn is not None:
+                try:
+                    # Tenta ler os dados existentes primeiro
+                    try:
+                        dados_existentes = conn.read()
+                    except Exception:
+                        dados_existentes = pd.DataFrame()
+
+                    # Prepara a nova linha
+                    nova_linha = pd.DataFrame([{
+                        "Data": str(data_registro),
+                        "Turno": turno,
+                        "Máquina": maquina,
+                        "Operador": operador,
+                        "Tempo Total (h)": tempo_total,
+                        "Tempo Produção (h)": tempo_producao,
+                        "Tempo Manutenção (h)": tempo_manutencao,
+                        "Hora Parou": hora_parou,
+                        "Hora Voltou": hora_voltou,
+                        "Motivo da Parada": motivo_parada,
+                        "Peças Boas": pecas_produzidas,
+                        "Refugo": pecas_perdidas,
+                        "Qualidade (%)": f"{porcentagem_qualidade}%",
+                        "Observações": observacoes
+                    }])
+                    
+                    # Concatena e grava
+                    dados_atualizados = pd.concat([dados_existentes, nova_linha], ignore_index=True)
+                    conn.update(data=dados_atualizados)
+                    
+                    st.success("✨ Registro enviado com sucesso! Os dados entraram na sua planilha central.")
+                    st.balloons()
+                except Exception as erro:
+                    st.error(f"Erro ao salvar na planilha: {erro}. Verifique se o link no Secrets é o da nova planilha convertida (sem o .xlsx).")
+            else:
+                st.error("Erro de conexão de rede com os servidores do Streamlit/Google. Verifique as configurações de rede.")
         else:
             st.warning("Por favor, preencha o campo do Operador antes de enviar.")
