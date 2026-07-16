@@ -23,7 +23,7 @@ with st.form("formulario_turno"):
     
     col1, col2 = st.columns(2)
     with col1:
-        maquina = st.selectbox("Selecione a Máquina/Posto:", ["BLM", "EMT", "ZAPROMAQ", "SOLDA", "SERRA"])
+        maquina = st.selectbox("Selecione a Máquina/Posto:", ["BLM", "EMT", "ZAPROMAQ", "SOLDA","LASER","SERRA"])
         operador = st.text_input("Nome do Operador:")
     with col2:
         turno = st.selectbox("Turno:", ["1º Turno", "2º Turno", "3º Turno", "Turno Geral"])
